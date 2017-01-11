@@ -12,7 +12,8 @@ enum ReaderError {
     InvalidToken,
     InvalidCharacter,
     InvalidSymbol,
-    InvalidKeyword
+    InvalidKeyword,
+    UnsupportedCharacter
 }
 
 struct Reader<'a> {
@@ -114,6 +115,27 @@ fn read_regex(r : &mut Reader, _ : char) -> ReaderResult<Pattern> {
 fn read_token(r : &mut Reader, initch : char) -> ReaderResult<String> {
     read_while(r, &|c| is_macro_terminating(c) || is_whitespace(c), false)
         .map(|s| initch.to_string() + &s)
+}
+
+fn read_character(r : &mut Reader, _ : char) -> ReaderResult<Character> {
+    let c = try!(read_char(r));
+    let token = if is_macro_terminating(c) || is_whitespace(c) {
+        c.to_string()
+    } else {
+        try!(read_token(r, c))
+    };
+    let len = token.chars().count();
+    match () {
+        _ if len == 1 => match token.chars().nth(0) {
+            Some(c) => Ok(Character(c)),
+            None => Err(ReaderError::InvalidCharacter)
+        },
+        _ if token == "newline" => Ok(Character('\n')),
+        _ if token == "space" => Ok(Character(' ')),
+        _ if token == "tab" => Ok(Character('\t')),
+        _ if token == "return" => Ok(Character('\r')),
+        _ => Err(ReaderError::UnsupportedCharacter)
+    }
 }
 
 fn parse_symbol(token : String) ->
@@ -223,6 +245,20 @@ fn read_token_test() {
     assert!(read_token(&mut r2, 'a').expect("Failed read_token") == "abc");
     let mut r3 = string_reader("bc\\");
     assert!(read_token(&mut r3, 'a').expect("Failed read_token") == "abc");
+}
+
+#[test]
+fn read_character_test() {
+    let mut r = string_reader("c");
+    assert!(read_character(&mut r, '\\') == Ok(Character('c')));
+    let mut r = string_reader("newline");
+    assert!(read_character(&mut r, '\\') == Ok(Character('\n')));
+    let mut r = string_reader("space");
+    assert!(read_character(&mut r, '\\') == Ok(Character(' ')));
+    let mut r = string_reader("tab");
+    assert!(read_character(&mut r, '\\') == Ok(Character('\t')));
+    let mut r = string_reader("return");
+    assert!(read_character(&mut r, '\\') == Ok(Character('\r')));
 }
 
 #[test]

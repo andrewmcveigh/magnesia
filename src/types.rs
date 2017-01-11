@@ -54,3 +54,18 @@ impl fmt::Display for Pattern {
         write!(f, "#\"{}\"", self.0)
     }
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Character(pub char);
+
+impl fmt::Display for Character {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            '\n' => write!(f, "\\newline"),
+            '\r' => write!(f, "\\return"),
+            '\t' => write!(f, "\\tab"),
+            ' '  => write!(f, "\\space"),
+            _    => write!(f, "\\{}", self.0)
+        }
+    }
+}
