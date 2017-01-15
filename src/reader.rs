@@ -1,9 +1,16 @@
+use std::any::Any;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 use std::vec::*;
+use std::collections::*;
 use types::*;
-// use std::result::*;
+
+enum ReadResult<'a> {
+    READ_EOF,
+    READ_FINISHED,
+    Read(&'a Form)
+}
 
 #[derive(Debug, PartialEq, Eq)]
 enum ReaderError {
@@ -181,6 +188,44 @@ fn read_keyword(r : &mut Reader, _ : char) -> ReaderResult<Keyword> {
         },
         Err(e) => Err(e)
     }
+}
+
+fn read_delimited<'a>(delim : char, r : &mut Reader) -> ReaderResult<LinkedList<&'a Form>> {
+    let mut list = LinkedList::new();
+    loop {
+        let form = try!(read(r, false, ReadResult::READ_EOF, delim));
+        match form {
+            ReadResult::READ_FINISHED => return Ok(list),
+            ReadResult::READ_EOF      => return Err(ReaderError::EOF),
+            ReadResult::Read(form)    => list.push_back(form)
+        }
+    }
+}
+
+fn read_list<'a>(delim : char, r : &mut Reader) -> ReaderResult<LinkedList<&'a Form>> {
+    read_delimited(delim, r)
+}
+
+fn read_vector<'a>(delim : char, r : &mut Reader) -> ReaderResult<Vec<&'a Form>> {
+    let mut vec = Vec::new();
+    let mut forms = try!(read_delimited(delim, r));
+    while let Some(x) = forms.pop_front() {
+        vec.push(x)
+    }
+    Ok(vec)
+}
+
+// fn read_map<'a>(delim : char, r : &mut Reader) -> ReaderResult<AList<'a>> {
+//     let mut alist = AList::new();
+//     let mut forms = try!(read_delimited(delim, r));
+//     while let (Some(k), Some(v)) = (forms.pop_front(), forms.pop_front()) {
+//         alist.assoc(k, v);
+//     }
+//     Ok(alist)
+// }
+
+fn read<'a>(r : &mut Reader, eof_err : bool, sentinel : ReadResult, return_on : char) -> ReaderResult<ReadResult<'a>> {
+    Ok(ReadResult::READ_FINISHED)
 }
 
 #[test]

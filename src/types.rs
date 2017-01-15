@@ -1,32 +1,13 @@
-use std::fmt;
+use std::any::{Any, TypeId};
+use std::hash::{ Hash, Hasher };
 
 #[derive(PartialEq, Eq)]
 pub enum Boolean { True, False }
-
-impl fmt::Display for Boolean {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Boolean::True => write!(f, "True"),
-            &Boolean::False => write!(f, "False")
-        }
-    }
-}
 
 #[derive(PartialEq, Eq)]
 pub enum Symbol {
     SimpleSymbol(String),
     NamespacedSymbol(String, String)
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Symbol::SimpleSymbol(ref name)
-                => write!(f, "{}", name),
-            &Symbol::NamespacedSymbol(ref ns, ref name)
-                => write!(f, "{}/{}", ns, name)
-        }
-    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -35,37 +16,121 @@ pub enum Keyword {
     NamespacedKeyword(String, String)
 }
 
-impl fmt::Display for Keyword {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Keyword::SimpleKeyword(ref name)
-                => write!(f, ":{}", name),
-            &Keyword::NamespacedKeyword(ref ns, ref name)
-                => write!(f, ":{}/{}", ns, name)
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct Pattern(pub String);
-
-impl fmt::Display for Pattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#\"{}\"", self.0)
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Character(pub char);
 
-impl fmt::Display for Character {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            '\n' => write!(f, "\\newline"),
-            '\r' => write!(f, "\\return"),
-            '\t' => write!(f, "\\tab"),
-            ' '  => write!(f, "\\space"),
-            _    => write!(f, "\\{}", self.0)
+pub struct EvalError;
+
+pub trait Form : Any {
+    fn form_eq<'a>(&self, other: &'a Form) -> bool;
+
+    #[inline]
+    fn is<T: 'static>(self) -> bool {
+        let t = TypeId::of::<T>();
+        let boxed = self.get_type_id();
+        t == boxed
+    }
+
+    fn downcast_ref<T: Form>(&self) -> Option<&T> {
+        if self.is::<T>() {
+            unsafe {
+                Some(&*(self as *const Any as *const T))
+            }
+        } else {
+            None
         }
     }
+}
+
+impl PartialEq for Form {
+    fn eq(&self, other : &Form) -> bool { self.form_eq(other) }
+}
+
+impl Eq for Form {}
+
+impl Form for Keyword {
+    fn form_eq<'a>(&self, other: &'a Form) -> bool {
+        let other = other as &Any;
+        if let Some(other) = other.downcast_ref::<Keyword>() {
+            self == other
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub struct KeyVal<'a> {
+    k: &'a Form,
+    v: &'a Form
+}
+
+#[derive(PartialEq, Eq)]
+pub struct AList<'a> {
+    head: Option<KeyVal<'a>>,
+    tail: Option<&'a AList<'a>>
+}
+
+impl<'a> AList<'a> {
+    pub fn new() -> Self {
+        AList { head: None, tail: None }
+    }
+
+    pub fn assoc(&self, key: &'a Form, val: &'a Form) -> AList<'a> {
+        // if let Some(head) = self.head {
+        //     if let Some(tail) = self.tail {
+        //         AList { head: self.head, tail: Some(&tail.assoc(key, val)) }
+        //     } else {
+        //         let ref tail = AList::new();
+        //         AList { head: self.head, tail: Some(&tail.assoc(key, val)) }
+        //     }
+        // } else {
+            AList { head: Some(KeyVal { k: key, v: val }), tail: None }
+        // }
+    }
+}
+
+pub trait Lookup<'a> {
+    fn lookup(&'a self, key: &Form) -> Option<&'a Form>;
+}
+
+pub trait Associative {
+    fn assoc(&self, key: &Form, val: &Form) -> Associative;
+}
+
+// impl<'a> Lookup<'a> for AList<'a> {
+//     fn lookup(&'a self, key: &Form) -> Option<&'a Form> {
+//         if let Some(head) = self.head {
+//             if head.k == key {
+//                 Some(head.v)
+//             } else if let Some(tail) = self.tail {
+//                 tail.lookup(key)
+//             } else {
+//                 None
+//             }
+//         } else {
+//             None
+//         }
+//     }
+// }
+
+// impl<'a> Associative for AList<'a> {
+// }
+
+#[test]
+fn alist_assoc_test() {
+    let alist_a = AList::new()
+        .assoc(&Keyword::SimpleKeyword("test".to_string()) as &Form,
+               &Keyword::SimpleKeyword("other".to_string()) as &Form);
+    let alist_b = AList {
+        head: Some(KeyVal {
+            k: &Keyword::SimpleKeyword("test".to_string()) as &Form,
+            v: &Keyword::SimpleKeyword("other".to_string()) as &Form
+        }),
+        tail: None
+    };
+    assert!(alist_a == alist_b)
 }
